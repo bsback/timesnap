@@ -66,8 +66,13 @@ commander
                 return parseInt(d);
             });
             return dims.length > 1
-                ? { width: dims[0], height: dims[1] }
-                : { width: dims[0] };
+                ? {
+                      width: dims[0],
+                      height: dims[1]
+                  }
+                : {
+                      width: dims[0]
+                  };
         }
     )
     .option(
@@ -142,10 +147,6 @@ commander
         "Uses Chromium/Chrome application at specified path for puppeteer"
     )
     .option(
-        "--remote-url <path>",
-        "Connect to remote Chromium/Chrome instance using puppeteer.connect()"
-    )
-    .option(
         "-L, --launch-arguments <arguments>",
         "Custom launch arguments for Puppeteer browser",
         function(str) {
@@ -156,15 +157,6 @@ commander
     .option(
         "--no-headless",
         "Chromium/Chrome runs in a window instead of headless mode"
-    )
-    .option(
-        "--screenshot-type <type>",
-        "Output image format for screenshots, either png or jpeg"
-    )
-    .option(
-        "--screenshot-quality <level>",
-        "The quality level for lossy screenshots",
-        parseFloat
     )
     .parse(process.argv);
 

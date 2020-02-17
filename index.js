@@ -55,6 +55,8 @@ module.exports = function(config) {
         config.outputDirectory || "./"
     );
 
+    var _startFrameIndex = fps * 12; //包括起始点，1开始
+
     if (url.indexOf("://") === -1) {
         // assume it is a file path
         url = "file://" + path.resolve(process.cwd(), url);
@@ -86,6 +88,7 @@ module.exports = function(config) {
         startFrame = 1;
     }
     console.log("startFrame:" + startFrame);
+
     frameDuration = 1000 / fps;
 
     if (!frameNumToTime) {
@@ -113,38 +116,15 @@ module.exports = function(config) {
         args: config.launchArguments || []
     };
 
-    const getBrowser = function(config, launchOptions) {
-        if (config.browser) {
-            return Promise.resolve(config.browser);
-        } else if (config.launcher) {
-            return Promise.resolve(config.launcher(launchOptions));
-        } else if (config.remoteUrl) {
-            let queryString = Object.keys(launchOptions)
-                .map(key => key + "=" + launchOptions[key])
-                .join("&");
-            let remote = config.remoteUrl + "?" + queryString;
-            return puppeteer.connect({ browserWSEndpoint: remote });
-        } else {
-            return puppeteer.launch(launchOptions);
-        }
-    };
-
-    return getBrowser(config, launchOptions).then(function(browser) {
+    return puppeteer.launch(launchOptions).then(function(browser) {
         return browser
             .newPage()
             .then(function(page) {
-                // A marker is an action at a specific time
-                var markers = [];
-                var markerId = 0;
-                var addMarker = function({ time, type, data }) {
-                    markers.push({ time, type, data, id: markerId++ });
-                };
                 config = Object.assign(
                     {
                         log,
                         outputPath,
                         page,
-                        addMarker,
                         framesToCapture
                     },
                     config
@@ -201,7 +181,9 @@ module.exports = function(config) {
                     })
                     .then(function() {
                         log("Going to " + url + "...");
-                        return page.goto(url, { waitUntil: "networkidle0" });
+                        return page.goto(url, {
+                            waitUntil: "networkidle0"
+                        });
                     })
                     .then(function() {
                         log("Page loaded");
@@ -220,70 +202,66 @@ module.exports = function(config) {
                         });
                     })
                     .then(function() {
-                        var browserFrames = getBrowserFrames(page.mainFrame());
-                        var captureTimes = [];
                         if (capturer.beforeCapture) {
-                            // run beforeCapture right before any capture frames
-                            addMarker({
-                                time:
-                                    delayMs +
-                                    frameNumToTime(1, framesToCapture),
-                                type: "Run Function",
-                                data: {
-                                    fn: function() {
-                                        return capturer.beforeCapture(config);
-                                    }
-                                }
-                            });
+                            return capturer.beforeCapture(config);
                         }
+                    })
+                    .then(function() {
+                        var browserFrames = getBrowserFrames(page.mainFrame());
+                        // A marker is an action at a specific time
+                        var markers = [];
+                        var captureMarkers = [];
+                        var markerId = 0;
                         for (let i = 1; i <= framesToCapture; i++) {
-                            addMarker({
+                            captureMarkers.push({
                                 time:
                                     delayMs +
                                     frameNumToTime(i, framesToCapture),
-                                type: "Capture",
-                                data: { frameCount: i }
+                                frameCount: i,
+                                id: markerId,
+                                type: "Capture"
                             });
-                            captureTimes.push(
-                                delayMs + frameNumToTime(i, framesToCapture)
-                            );
+                            markerId++;
                         }
 
-                        // run 'requestAnimationFrame' early on, just in case if there
-                        // is initialization code inside of it
                         var addAnimationGapThreshold = 100;
                         var addAnimationFrameTime = 20;
                         if (
-                            captureTimes.length &&
-                            captureTimes[0] > addAnimationGapThreshold
+                            captureMarkers.length &&
+                            captureMarkers[0].time > addAnimationGapThreshold
                         ) {
-                            addMarker({
+                            markers.push({
                                 time: addAnimationFrameTime,
-                                type: "Only Animate"
+                                type: "Only Animate",
+                                id: markerId
                             });
+                            markerId++;
                         }
 
                         var lastMarkerTime = 0;
                         var maximumAnimationFrameDuration =
                             config.maximumAnimationFrameDuration;
-                        captureTimes.forEach(function(time) {
+                        captureMarkers.forEach(function(e) {
                             if (maximumAnimationFrameDuration) {
-                                let frameDuration = time - lastMarkerTime;
+                                let frameDuration = e.time - lastMarkerTime;
                                 let framesForDuration = Math.ceil(
                                     frameDuration /
                                         maximumAnimationFrameDuration
                                 );
                                 for (let i = 1; i < framesForDuration; i++) {
-                                    addMarker({
+                                    markers.push({
                                         time:
                                             lastMarkerTime +
                                             (i * frameDuration) /
                                                 framesForDuration,
-                                        type: "Only Animate"
+                                        type: "Only Animate",
+                                        id: markerId
                                     });
+                                    markerId++;
                                 }
                             }
-                            lastMarkerTime = time;
+                            markers.push(e);
+                            lastMarkerTime = e.time;
                         });
 
                         markers = markers.sort(function(a, b) {
@@ -300,7 +278,7 @@ module.exports = function(config) {
                                 return markerIndex < markers.length;
                             },
                             function() {
-                                var marker = markers[markerIndex];
+                                var e = markers[markerIndex];
                                 var p;
                                 markerIndex++;
 
@@ -310,15 +288,15 @@ module.exports = function(config) {
                                 if (markerIndex < startFrame) {
                                     p = timeHandler.goToTimeAndAnimate(
                                         browserFrames,
-                                        marker.time
+                                        e.time
                                     );
                                     return p;
                                 }
 
-                                if (marker.type === "Capture") {
+                                if (e.type === "Capture") {
                                     p = timeHandler.goToTimeAndAnimateForCapture(
                                         browserFrames,
-                                        marker.time
+                                        e.time
                                     );
                                     // because this section is run often and there is a small performance
                                     // penalty of using .then(), we'll limit the use of .then()
@@ -331,7 +309,7 @@ module.exports = function(config) {
                                                 );
                                                 return config.preparePageForScreenshot(
                                                     page,
-                                                    marker.data.frameCount,
+                                                    e.frameCount,
                                                     framesToCapture
                                                 );
                                             })
@@ -343,18 +321,16 @@ module.exports = function(config) {
                                         p = p.then(function() {
                                             return capturer.capture(
                                                 config,
-                                                marker.data.frameCount,
+                                                e.frameCount,
                                                 framesToCapture
                                             );
                                         });
                                     }
-                                } else if (marker.type === "Only Animate") {
+                                } else if (e.type === "Only Animate") {
                                     p = timeHandler.goToTimeAndAnimate(
                                         browserFrames,
-                                        marker.time
+                                        e.time
                                     );
-                                } else if (marker.type === "Run Function") {
-                                    p = marker.data.fn(marker);
                                 }
                                 return p;
                             }
