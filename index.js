@@ -177,7 +177,11 @@ module.exports = function (config) {
                         return initializePageUtils(page);
                     })
                     .then(function () {
-                        return initializeMediaTimeHandler(page);
+                        return initializeMediaTimeHandler(
+                            page,
+                            startFrame,
+                            frameDuration
+                        );
                     })
                     .then(function () {
                         log("Going to " + url + "...");
