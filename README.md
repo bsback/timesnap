@@ -2,7 +2,7 @@
 
 **timesnap** is a Node.js program that records screenshots of web pages that use JavaScript animations. It uses [puppeteer](https://github.com/GoogleChrome/puppeteer) to open a web page, overwrite its time-handling functions, and record snapshots at virtual times. For some web pages, this allows frames to be recorded slower than real time, while appearing smooth and consistent when recreated into a video.
 
-You can use **timesnap** from the command line or as a Node.js library. It requires Node v6.4.0 or higher and npm.
+You can use **timesnap** from the command line or as a Node.js library. It requires Node v8.9.0 or higher and npm.
 
 To record screenshots and compile them into a video using only one command, see **[timecut](https://github.com/tungs/timecut)**.
 
@@ -160,6 +160,10 @@ Opens https://breathejs.org/examples/Drawing-US-Counties.html, sets the viewport
     * Arguments to pass to Puppeteer/Chromium, enclosed in quotes. Example: `--launch-arguments="--single-process"`. A list of arguments can be found [here](https://peter.sh/experiments/chromium-command-line-switches).
 * <a name="cli-options-no-headless" href="#cli-options-no-headless">#</a> No Headless: `--no-headless`
     * Runs Chromium/Chrome in windowed mode.
+* <a name="cli-options-screenshot-type" href="#cli-options-screenshot-type">#</a> Screenshot Type: `--screenshot-type` *type*
+    * Output image format for the screenshots. By default, the file extension is used to infer type, and failing that, `png` is used. `jpeg` is also available.
+* <a name="cli-options-screenshot-quality" href="#cli-options-screenshot-quality">#</a> Screenshot Quality: `--screenshot-quality` *number*
+    * Quality level between 0 to 1 for lossy screenshots. Defaults to 0.92 when in [canvas capture mode](#cli-options-canvas-capture-mode) and 0.8 otherwise.
 * <a name="cli-options-start-delay" href="#cli-options-start-delay">#</a> Start Delay: `--start-delay` *n seconds*
     * Waits *n real seconds* after loading the page before starting the virtual timeline.
 * <a name="cli-options-quiet" href="#cli-options-quiet">#</a> Quiet: `-q`, `--quiet`
@@ -202,7 +206,7 @@ timesnap({
 });
 ```
 
-**<a name="node-example-multiple" href="#node-example-multiple">#</a> Multiple pages (Requires Node v7.6.0 or higher):**
+**<a name="node-example-multiple" href="#node-example-multiple">#</a> Multiple pages:**
 ```node
 const timesnap = require('timesnap');
 var pages = [
@@ -231,7 +235,7 @@ var pages = [
 
 ### <a name="node-api" href="#node-api">#</a> Node API
 
-The Node API is structured similarly to the command line options, but there are a few options for the Node API that are not accessible through the command line interface: [`config.logToStdErr`](#js-config-log-to-std-err), [`config.frameProcessor`](#js-config-frame-processor), [`config.preparePage`](#js-config-prepare-page), [`config.preparePageForScreenshot`](#js-config-prepare-page-for-screenshot), and certain [`config.viewport`](#js-config-viewport) properties.
+The Node API is structured similarly to the command line options, but there are a few options for the Node API that are not accessible through the command line interface: [`config.logToStdErr`](#js-config-log-to-std-err), [`config.frameProcessor`](#js-config-frame-processor), [`config.preparePage`](#js-config-prepare-page), [`config.preparePageForScreenshot`](#js-config-prepare-page-for-screenshot), [`config.logger`](#js-config-logger), [`config.shouldSkipFrame`](#js-config-should-skip-frame), and certain [`config.viewport`](#js-config-viewport) properties.
 
 **timesnap(config)**
 *  <a name="js-api-config" href="#js-api-config">#</a> `config` &lt;[Object][]&gt;
@@ -268,9 +272,16 @@ The Node API is structured similarly to the command line options, but there are 
      * <a name="js-config-remote-url" href="#js-config-remote-url">#</a> `remoteUrl` &lt;[string][]&gt; URL of remote Chromium/Chrome instance to connect using `puppeteer.connect()`.
     * <a name="js-config-launch-arguments" href="#js-config-launch-arguments">#</a> `launchArguments` &lt;[Array][] &lt;[string][]&gt;&gt; Extra arguments for Puppeteer/Chromium. Example: `['--single-process']`. A list of arguments can be found [here](https://peter.sh/experiments/chromium-command-line-switches).
     * <a name="js-config-headless" href="#js-config-headless">#</a> `headless` &lt;[boolean][]&gt; Runs puppeteer in headless (nonwindowed) mode (default: `true`).
+    * <a name="js-config-screenshot-type" href="#js-config-screenshot-type">#</a> `screenshotType` &lt;[string][]&gt; Output image format for the screenshots. By default, the file extension is used to infer type, and failing that, `'png'` is used. `'jpeg'` is also available.
+    * <a name="js-config-screenshot-quality" href="#js-config-screenshot-quality">#</a> `screenshotQuality` &lt;[number][]&gt; Quality level between 0 to 1 for lossy screenshots. Defaults to 0.92 when in [canvas capture mode](#js-config-canvas-capture-mode) and 0.8 otherwise.
     * <a name="js-config-start-delay" href="#js-config-start-delay">#</a> `startDelay` &lt;[number][]&gt; Waits `config.startDelay` real seconds after loading before starting (default: `0`).
     * <a name="js-config-quiet" href="#js-config-quiet">#</a> `quiet` &lt;[boolean][]&gt; Suppresses console logging.
+    * <a name="js-config-logger" href="#js-config-logger">#</a> `logger` &lt;[function][](...[Object][])&gt; Replaces console logging with a particular function. The passed arguments are the same as those to `console.log` (in this case, usually one string).
     * <a name="js-config-log-to-std-err" href="#js-config-log-to-std-err">#</a> `logToStdErr` &lt;[boolean][]&gt; Logs to stderr instead of stdout. Doesn't do anything if `config.quiet` is set to true.
+    * <a name="js-config-should-skip-frame" href="#js-config-should-skip-frame">#</a> `shouldSkipFrame` &lt;[function][]([Object][])&gt; A function that determines whether a current frame should be skipped for capturing. It should return `true` if the current frame should be skipped, `false` if not. It is passed the following object:
+        * <a name="js-config-should-skip-frame-frame-count" href="#js-config-should-skip-frame-frame-count">#</a> `frameCount` &lt;[number][]&gt; The current frame count, starting at 1.
+        * <a name="js-config-should-skip-frame-frames-to-capture" href="#js-config-should-skip-frame-frames-to-capture">#</a> `framesToCapture` &lt;[number][]&gt; The total number of frames to be captured.
+        * <a name="js-config-should-skip-frame-page" href="#js-config-should-skip-frame-page">#</a> `page` &lt;[Page][]&gt; the puppeteer page.
     * <a name="js-config-frame-processor" href="#js-config-frame-processor">#</a> `frameProcessor` &lt;[function][]([Buffer][], [number][], [number][])&gt; A function that will be called after capturing each frame. If `config.outputDirectory` and `config.outputPattern` aren't specified, enabling this suppresses automatic file output. After capturing each frame, `config.frameProcessor` is called with three arguments, and if it returns a promise, capture will be paused until the promise resolves:
         * `screenshotData` &lt;[Buffer][]&gt; A buffer of the screenshot data.
         * `frameNumber` &lt;[number][]&gt; The current frame number (1 based).
